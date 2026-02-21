@@ -1,7 +1,6 @@
 // {
 //   "version": "0.2.0",
 //   "configurations": [
-
 //     {
 //       "name": "cds serve",
 //       "request": "launch",
@@ -19,7 +18,6 @@
 //     }
 //   ]
 // }
-
 {
   "version": "0.2.0",
   "configurations": [

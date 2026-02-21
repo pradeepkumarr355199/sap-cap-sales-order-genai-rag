@@ -1,0 +1,18 @@
+POST http://localhost:4004/odata/v4/sales/SalesOrders
+Content-Type: application/json
+
+{
+  "VBELN": "5000000020",
+  "ERDAT": "2026-02-21",
+  "AUART": "OR",
+  "KUNNR_ID": "1",
+  "Items": [
+    {
+      "POSNR": "000010",
+      "MATNR": "MAT001",
+      "ARKTX": "Laptop",
+      "KWMENG": 2,
+      "NETPR": 5000
+    }
+  ]
+}
