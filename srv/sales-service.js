@@ -13,7 +13,17 @@ module.exports = cds.service.impl(async function () {
             let total = 0;
 
             for (const item of items) {
-                total += (item.KWMENG || 0) * (item.NETPR || 0);
+
+                // 🚨 VALIDATION LOGIC
+                if (!item.KWMENG || item.KWMENG <= 0) {
+                    req.error(400, `Invalid Quantity for item ${item.POSNR}`);
+                }
+
+                if (!item.NETPR || item.NETPR <= 0) {
+                    req.error(400, `Invalid Price for item ${item.POSNR}`);
+                }
+
+                total += item.KWMENG * item.NETPR;
             }
 
             req.data.NETWR = total;

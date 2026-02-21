@@ -11,7 +11,7 @@ Content-Type: application/json
       "POSNR": "000010",
       "MATNR": "MAT001",
       "ARKTX": "Laptop",
-      "KWMENG": 2,
+      "KWMENG": 0,
       "NETPR": 5000
     }
   ]
