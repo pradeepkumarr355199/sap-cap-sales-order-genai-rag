@@ -2,7 +2,7 @@ POST http://localhost:4004/odata/v4/sales/SalesOrders
 Content-Type: application/json
 
 {
-  "VBELN": "5000000020",
+  "VBELN": "5000000050",
   "ERDAT": "2026-02-21",
   "AUART": "OR",
   "KUNNR_ID": "1",
@@ -11,7 +11,7 @@ Content-Type: application/json
       "POSNR": "000010",
       "MATNR": "MAT001",
       "ARKTX": "Laptop",
-      "KWMENG": 0,
+      "KWMENG": 3,
       "NETPR": 5000
     }
   ]
