@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "A simple CAP project.",
   "dependencies": {
-    "@cap-js/hana": "^2",
+    "@cap-js/hana": "^2.6.0",
     "@sap/cds": "^9",
+    "@sap/hana-client": "^2.27.23",
     "express": "^4"
   },
   "devDependencies": {
@@ -15,5 +16,11 @@
     "start": "cds-serve"
   },
   "private": true,
-  "cds": {}
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "hana"
+      }
+    }
+  }
 }
