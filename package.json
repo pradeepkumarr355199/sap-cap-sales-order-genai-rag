@@ -6,7 +6,10 @@
     "@cap-js/hana": "^2.6.0",
     "@sap/cds": "^9",
     "@sap/hana-client": "^2.27.23",
-    "express": "^4"
+    "@xenova/transformers": "^2.17.2",
+    "express": "^4",
+    "groq-sdk": "^0.37.0",
+    "pdfjs-dist": "^3.11.174"
   },
   "devDependencies": {
     "@cap-js/sqlite": "^2",
