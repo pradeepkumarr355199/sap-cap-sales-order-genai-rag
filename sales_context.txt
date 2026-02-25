@@ -1,0 +1,35 @@
+Sales Order Processing Policy - SAP SD Context
+
+1. Discount Policy
+• If net value exceeds 10,000 EUR, apply a 5% discount automatically.
+• Discount approval is required if discount exceeds 10%.
+• Bulk quantity orders above 100 units require manager approval.
+
+2. Regional Tax Rules
+• Orders from Germany must include VAT at 19%.
+• Exports outside EU are tax-exempt with proper documentation.
+• VAT ID validation is mandatory for EU B2B customers.
+
+3. Risk and Compliance Rules
+• Orders above 50,000 EUR are flagged as high-value risk.
+• Customers with overdue invoices may be blocked for new orders.
+• Frequent returns may trigger risk review.
+
+4. General Sales Order Context
+Sales Orders in SAP SD consist of header and item data. Header contains customer, order type,
+and total value. Items contain material, quantity, and pricing details. Net value is calculated as
+quantity multiplied by price per unit.
+
+
+
+Sales Order Processing Policy
+
+If net value exceeds 10000 EUR, apply a 5% discount.
+Discount above 10% requires approval.
+Orders from Germany must include 19% VAT.
+Orders above 50000 EUR are high-risk.
+Bulk orders above quantity 100 require manager approval.
+
+
+next step
+1. to create vector embeddings for doc --- not able to parse the doc.
