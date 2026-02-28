@@ -6,10 +6,10 @@ Content-Type: application/json
 # }
 
 
-{
-  "question": "Explain the sales pricing policy"
-}
-
 # {
-#   "question": "Explain sales order 50000001 and related policy"
+#   "question": "What is the weather today?"
 # }
+
+{
+  "question": "Explain sales order '5000000051' and related policy"
+}
