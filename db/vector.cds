@@ -13,3 +13,5 @@ entity SalesOrderEmbeddings {
     content           : LargeString;
     embedding         : Vector(384);
 }
+
+
