@@ -1,15 +1,22 @@
 POST http://localhost:4004/ai/ask
 Content-Type: application/json
+#x-role: SALES_REP # default value
+#  x-role: FINANCE
+# x-role: RISK_MANAGER
 
 # {
-#   "question": "Show sales order 50000001"
+#   "question": "Show sales order 5000000050 & 5000000060"
 # }
 
+
+# {
+#   "question": "give me salesordernumber having NETWR less than 5k"
+# }
 
 # {
 #   "question": "What is the weather today?"
 # }
 
 {
-  "question": "Explain sales order '5000000051' and related policy"
+  "question": "Explain sales order '5000000050' and related policy"
 }

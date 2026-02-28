@@ -3,10 +3,32 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { pipeline } = require('@xenova/transformers');
 const Groq = require('groq-sdk');
+const { INSERT } = cds.ql;
+// const userRole = req.headers['x-role'] || 'SALES_REP';
+
+let extractorInstance = null;
+
+async function getExtractor() {
+  if (!extractorInstance) {
+    console.log("Loading embedding model...");
+    extractorInstance = await pipeline(
+      'feature-extraction',
+      'Xenova/all-MiniLM-L6-v2'
+    );
+    console.log("Embedding model loaded.");
+  }
+  return extractorInstance;
+}
 
 module.exports = cds.service.impl(async function () {
 
   const db = await cds.connect.to('db');
+
+  //  Warm embedding model on startup
+  await getExtractor();
+
+  const AILog = cds.model.definitions['sap.audit.AILog'];
+  
   const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY
   });
@@ -24,7 +46,7 @@ module.exports = cds.service.impl(async function () {
   // =====================================
   // Load embedding model ONCE
   // =====================================
-  const extractor = await pipeline(
+  const extractor = await getExtractor(
     'feature-extraction',
     'Xenova/all-MiniLM-L6-v2'
   );
@@ -127,29 +149,39 @@ module.exports = cds.service.impl(async function () {
   // =====================================
   // 3️⃣ STRUCTURED SEARCH
   // =====================================
-  async function structuredSearch(question) {
+  
+  async function structuredSearch(question, userRole) {
 
-    // Detect Sales Order number (basic intent logic)
-    const soMatch = question.match(/\d{6,10}/);
+    const orderNumbers = question.match(/\d{6,10}/g);
+    if (!orderNumbers || orderNumbers.length === 0) return [];
 
-    if (soMatch) {
-      return await SELECT
-        .from(SalesOrderView)
-        .where({ SalesOrderNumber: soMatch[0] });
+    const placeholders = orderNumbers.map(() => '?').join(',');
+
+    const results = await db.run(
+      `
+      SELECT *
+      FROM SAP_SD_SALESORDERVIEW
+      WHERE SALESORDERNUMBER IN (${placeholders})
+      `,
+      orderNumbers
+    );
+
+    if (!results.length) return [];
+
+    // 🔐 ROLE-BASED FILTERING
+    if (userRole === 'SALES_REP') {
+      return results.filter(r => Number(r.NETWR) < 50000);
     }
 
-    // Detect customer name (simple heuristic)
-    if (question.toLowerCase().includes('customer')) {
-      return await SELECT
-        .from(SalesOrderView)
-        .limit(5);
+    if (userRole === 'RISK_MANAGER') {
+      return results.filter(r => Number(r.NETWR) >= 50000);
     }
-
-    // Fallback
-    return await SELECT
-      .from(SalesOrderView)
-      .limit(3);
+    // FINANCE or default → full access
+    return results;
   }
+
+   
+
   // =====================================
   // 4. Intent Detection Function
   // =====================================
@@ -158,7 +190,7 @@ module.exports = cds.service.impl(async function () {
 
     const q = question.toLowerCase();
 
-    const hasNumber = /\d{6,10}/.test(q);
+    const hasNumber = /\d{6,10}/g.test(q);
 
     const semanticKeywords = [
       'explain',
@@ -212,9 +244,9 @@ module.exports = cds.service.impl(async function () {
     if (!question) {
       return { error: "Please provide a question." };
     }
-
+    const userRole = req.headers['x-role'] || 'SALES_REP';
     const intent = detectIntent(question);
-
+    console.log("ROLE RECEIVED:", userRole);
     let vectorResults = [];
     let structuredResults = [];
 
@@ -222,7 +254,7 @@ module.exports = cds.service.impl(async function () {
     // STRUCTURED ONLY
     // =============================
     if (intent === 'structured') {
-      structuredResults = await structuredSearch(question);
+      structuredResults = await structuredSearch(question, userRole);
     }
 
     // =============================
@@ -239,7 +271,7 @@ module.exports = cds.service.impl(async function () {
     if (intent === 'hybrid') {
       const questionEmbedding = await embed(question);
       vectorResults = await similaritySearch(questionEmbedding);
-      structuredResults = await structuredSearch(question);
+      structuredResults = await structuredSearch(question, userRole);
     }
 
     // =============================
@@ -282,7 +314,7 @@ module.exports = cds.service.impl(async function () {
 
     // 🔐 Strict rule: if question contains order number,
     // structured data must exist
-    const containsOrderNumber = /\d{6,10}/.test(question);
+    const containsOrderNumber = /\d{6,10}/g.test(question); 
 
     if (containsOrderNumber && structuredResults.length === 0) {
       return {
@@ -312,44 +344,131 @@ module.exports = cds.service.impl(async function () {
   ${vectorContext}
   `;
 
+  //  Soft Token Guardrail - CALL GROQ
+  const estimatedTokens = finalContext.length / 4;
 
-    // =============================
-    // 🔐 STRICT SYSTEM PROMPT - CALL GROQ
-    // =============================
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content: `
-  You are an SAP Sales AI assistant.
-
-  Strict Rules:
-  1. Use ONLY the provided context.
-  2. Do NOT assume policies or thresholds not explicitly stated.
-  3. If required data is missing, respond exactly with:
-    "Information not found in system."
-  4. Do NOT use general knowledge.
-  `
-        },
-        {
-          role: "user",
-          content: `
-  Context:
-  ${finalContext}
-
-  Question:
-  ${question}
-  `
-        }
-      ]
-    });
-
+  if (estimatedTokens > 3000) {
     return {
       intent,
-      answer: completion.choices[0].message.content
+      answer: "Request too large. Please narrow your query."
     };
+  }
+
+    // =============================
+    //  STRICT SYSTEM PROMPT - CALL GROQ
+    // =============================
+  
+    //  GROQ CALL WITH FALLBACK
+  
+    const systemPrompt = `
+    You are an SAP Sales AI assistant.
+
+    Strict Rules:
+    1. Use ONLY the provided context.
+    2. Do NOT assume policies or thresholds not explicitly stated.
+    3. If required data is missing, respond exactly with:
+      "Information not found in system."
+    4. Do NOT use general knowledge.
+    `;
+
+    const userPrompt = `
+    Context:
+    ${finalContext}
+
+    Question:
+    ${question}
+    `;
+
+    let completion;
+    let modelUsed = "llama-3.3-70b-versatile";
+
+    try {
+      //  Primary model
+      completion = await groq.chat.completions.create({
+        model: modelUsed,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ]
+      });
+
+    } catch (primaryError) {
+
+      console.warn("Primary model failed. Switching to fallback model.");
+
+      modelUsed = "llama-3.3-8b-instant";
+
+      try {
+        //  Fallback model
+        completion = await groq.chat.completions.create({
+          model: modelUsed,
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ]
+        });
+
+      } catch (fallbackError) {
+
+        console.error("Fallback model also failed.");
+
+        return {
+          intent,
+          answer: "AI service temporarily unavailable. Please try again later."
+        };
+      }
+    }
+
+    
+    //  EXTRACT ANSWER
+    
+    const answer = completion.choices[0].message.content;
+
+    
+    //  TOKEN USAGE CAPTURE
+    
+    const usage = completion.usage || {};
+
+    const promptTokens = usage.prompt_tokens || 0;
+    const completionTokens = usage.completion_tokens || 0;
+    const totalTokens = usage.total_tokens || 0;
+
+    
+    //  SIMILARITY SCORE CAPTURE
+    
+    let topScore = null;
+    if (vectorResults.length > 0) {
+      topScore = vectorResults[0].SCORE;
+    }
+
+   
+    //  AUDIT INSERT (WITH MODEL)
+    
+    await db.run(
+      INSERT.into('sap.audit.AILog').entries({
+        question: question,
+        intent: intent,
+        structuredCount: structuredResults.length,
+        vectorCount: vectorResults.length,
+        topScore: topScore,
+        response: answer,
+        promptTokens: promptTokens,
+        completionTokens: completionTokens,
+        totalTokens: totalTokens,
+        modelUsed: modelUsed   // 🔥 NEW FIELD
+      })
+    );
+
+    
+    //  RETURN RESPONSE
+    
+    return {
+      intent,
+      answer
+    };
+
 
   });
    
