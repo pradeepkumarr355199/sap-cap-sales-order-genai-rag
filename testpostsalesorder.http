@@ -1,0 +1,15 @@
+POST http://localhost:4004/ai/ask
+Content-Type: application/json
+
+# {
+#   "question": "Show sales order 50000001"
+# }
+
+
+{
+  "question": "Explain the sales pricing policy"
+}
+
+# {
+#   "question": "Explain sales order 50000001 and related policy"
+# }

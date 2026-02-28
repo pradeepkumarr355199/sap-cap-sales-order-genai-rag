@@ -1,4 +1,5 @@
-POST http://localhost:4004/odata/v4/ai/loadText
+POST http://localhost:4004/ai/loadText
 Content-Type: application/json;odata.metadata=minimal
 
 {}
+
