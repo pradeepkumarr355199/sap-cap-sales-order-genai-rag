@@ -2,10 +2,14 @@ const cds = require('@sap/cds');
 const fs = require('fs');
 const crypto = require('crypto');
 const { pipeline } = require('@xenova/transformers');
+const Groq = require('groq-sdk');
 
 module.exports = cds.service.impl(async function () {
 
   const db = await cds.connect.to('db');
+  const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+  });
 
   // ✅ Correct entity resolution
   //const { DocumentEmbeddings, SalesOrderView } = this.entities;
@@ -218,47 +222,135 @@ module.exports = cds.service.impl(async function () {
     // STRUCTURED ONLY
     // =============================
     if (intent === 'structured') {
-
       structuredResults = await structuredSearch(question);
-
-      return {
-        intent,
-        structuredResults
-      };
     }
 
     // =============================
     // VECTOR ONLY
     // =============================
     if (intent === 'vector') {
-
       const questionEmbedding = await embed(question);
       vectorResults = await similaritySearch(questionEmbedding);
+    }
 
+    // =============================
+    // HYBRID
+    // =============================
+    if (intent === 'hybrid') {
+      const questionEmbedding = await embed(question);
+      vectorResults = await similaritySearch(questionEmbedding);
+      structuredResults = await structuredSearch(question);
+    }
+
+    // =============================
+    // 🔐 GUARDRAIL: No Retrieval Protection
+    // =============================
+    if (
+      intent === 'vector' &&
+      vectorResults.length === 0
+    ) {
       return {
         intent,
-        vectorResults
+        answer: "Information not found in knowledge base."
+      };
+    }
+
+    if (
+      intent === 'structured' &&
+      structuredResults.length === 0
+    ) {
+      return {
+        intent,
+        answer: "Sales order not found in system."
+      };
+    }
+
+    if (
+      intent === 'hybrid' &&
+      vectorResults.length === 0 &&
+      structuredResults.length === 0
+    ) {
+      return {
+        intent,
+        answer: "Relevant information not found."
       };
     }
 
     // =============================
-    // HYBRID (DEFAULT)
+    // RETRIEVAL COMPLETE
     // =============================
-    const questionEmbedding = await embed(question);
 
-    vectorResults = await similaritySearch(questionEmbedding);
-    structuredResults = await structuredSearch(question);
+    // 🔐 Strict rule: if question contains order number,
+    // structured data must exist
+    const containsOrderNumber = /\d{6,10}/.test(question);
+
+    if (containsOrderNumber && structuredResults.length === 0) {
+      return {
+        intent,
+        answer: "Sales order not found in system."
+      };
+    }
+
+    // =============================
+    // CONTEXT MERGE
+    // =============================
+    const structuredContext =
+      structuredResults.length
+        ? JSON.stringify(structuredResults, null, 2)
+        : "";
+
+    const vectorContext =
+      vectorResults.length
+        ? vectorResults.map(v => v.CONTENT).join('\n')
+        : "";
+
+    const finalContext = `
+  Structured SAP Data:
+  ${structuredContext}
+
+  Relevant Documents:
+  ${vectorContext}
+  `;
+
+
+    // =============================
+    // 🔐 STRICT SYSTEM PROMPT - CALL GROQ
+    // =============================
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `
+  You are an SAP Sales AI assistant.
+
+  Strict Rules:
+  1. Use ONLY the provided context.
+  2. Do NOT assume policies or thresholds not explicitly stated.
+  3. If required data is missing, respond exactly with:
+    "Information not found in system."
+  4. Do NOT use general knowledge.
+  `
+        },
+        {
+          role: "user",
+          content: `
+  Context:
+  ${finalContext}
+
+  Question:
+  ${question}
+  `
+        }
+      ]
+    });
 
     return {
       intent,
-      vectorResults,
-      structuredResults
+      answer: completion.choices[0].message.content
     };
 
   });
-  
-  
-  
-  
-
+   
 });

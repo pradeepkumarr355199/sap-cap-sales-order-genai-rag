@@ -31,5 +31,3 @@ Orders above 50000 EUR are high-risk.
 Bulk orders above quantity 100 require manager approval.
 
 
-next step
-1. to create vector embeddings for doc --- not able to parse the doc.
